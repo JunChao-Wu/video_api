@@ -6,6 +6,5 @@ export function chunkEncode(req: Request, res: Response, next: NextFunction) {
   if (param.chunk) {
     param.chunk = decode(param.chunk);
   }
-  console.log("🚀 ~ chunkEncode ~ param:", param)
   next();
 }

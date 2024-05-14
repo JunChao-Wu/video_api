@@ -1,0 +1,87 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider     = "mysql"
+  url          = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model User {
+  id            Int      @id @default(autoincrement()) @db.UnsignedInt
+  user_id       BigInt   @unique @db.UnsignedBigInt
+  user_name     String   @db.VarChar(100)
+  user_email    String   @default("") @db.VarChar(50)
+  user_password String?  @db.Char(64)
+  user_role_id  Int      @default(2) @db.UnsignedInt
+  timezone      Int      @default(8) @db.UnsignedTinyInt
+  created_at    DateTime @default(now()) @db.Timestamp(0)
+  updated_at    DateTime @default(now()) @db.Timestamp(0)
+  video         Video[]
+  updatedUser   Video[]  @relation(name: "updatedUser")
+
+  @@index([user_id])
+  @@map("users")
+}
+
+model Video {
+  id                 Int    @id @default(autoincrement()) @db.UnsignedInt
+  video_id           BigInt @unique @db.UnsignedBigInt
+  video_series_id    BigInt @db.UnsignedBigInt
+  video_title        String @default("") @db.VarChar(100)
+  video_source_path  String @default("") @db.VarChar(200)
+  video_remote_path  String @default("") @db.VarChar(200)
+  video_hash         String @default("") @db.VarChar(100)
+  video_aspect_ratio String @default("") @db.VarChar(5)
+  video_duration     Int    @default(0) @db.UnsignedInt
+  video_size         Int    @default(0) @db.UnsignedInt
+  video_bitrate      Int    @default(0) @db.UnsignedInt
+  video_ext          String @default("") @db.VarChar(10)
+  video_sequence     Int    @default(0) @db.UnsignedTinyInt
+  status             Int    @default(0) @db.UnsignedTinyInt
+  created_user_id    BigInt @db.UnsignedBigInt
+  updated_user_id    BigInt @db.UnsignedBigInt
+  created_timezone   Int    @default(8) @db.UnsignedTinyInt
+  updated_timezone   Int    @default(8) @db.UnsignedTinyInt
+  created_time       BigInt @db.UnsignedBigInt
+  updated_time       BigInt @db.UnsignedBigInt
+  createdUser        User   @relation(fields: [created_user_id], references: [user_id])
+  updatedUser        User   @relation(fields: [updated_user_id], references: [user_id], name: "updatedUser")
+  seriesInfo         Series @relation(fields: [video_series_id], references: [series_id])
+
+  @@map("videos")
+}
+
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+model Series {
+  id                        Int    @id @default(autoincrement()) @db.UnsignedInt
+  series_id                 BigInt @unique @db.UnsignedBigInt
+  series_name               String @default("") @db.VarChar(150)
+  series_region             String @default("") @db.VarChar(50)
+  series_type               Int    @default(0) @db.UnsignedTinyInt
+  series_alias              String @default("") @db.VarChar(150)
+  series_introduction       String @default("") @db.VarChar(1000)
+  series_original_worker    String @default("") @db.VarChar(25)
+  series_production_company String @default("") @db.VarChar(100)
+  series_premiere_date      Int    @default(99999999) @db.UnsignedInt
+  series_status             Int    @default(0) @db.UnsignedTinyInt
+  series_tags               Json?
+  series_cover_path         String @default("") @db.VarChar(150)
+  created_user_id           BigInt @db.UnsignedBigInt
+  updated_user_id           BigInt @db.UnsignedBigInt
+  created_timezone          Int    @default(8) @db.UnsignedTinyInt
+  updated_timezone          Int    @default(8) @db.UnsignedTinyInt
+  created_time              BigInt @db.UnsignedBigInt
+  updated_time              BigInt @db.UnsignedBigInt
+
+  videos Video[]
+
+  @@index([series_id])
+  @@map("series")
+}
+
+model roles {
+  id         Int    @id @default(autoincrement()) @db.UnsignedInt
+  roles_name String @default("") @db.VarChar(20)
+}

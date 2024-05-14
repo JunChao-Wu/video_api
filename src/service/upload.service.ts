@@ -1,59 +1,81 @@
 import { Injectable } from '@nestjs/common';
 import * as fs from "fs";
-import * as path from "path";
+import * as Path from "path";
+
+import { CreateVideoInfoType, VideoService } from "../service/db_video/video.service";
+import { FfmpegService } from "../service/ffmpeg.service";
 
 
 @Injectable()
 export class UploadService {
+  constructor(
+    private videoService: VideoService,
+    private ffmpegService: FfmpegService,
+  ) {}
 
-  async mergerFileChunks(config: { filePath: string, chunksDir: string, chunkSize: number, }, excute: boolean): Promise<void> {
-    if (!excute) {
+  async checkSeriesVideoExist (config: {seriesId: number, sequence: number}) {
+    const hasUploaded = await this.videoService.findBySeriesIdAndSequence({
+      seriesId: config.seriesId,
+      sequence: config.sequence,
+    })
+    return hasUploaded && hasUploaded > 0 ? true : false;
+  }
+
+  async mergerFileChunks(config: ConfigType, excute: boolean): Promise<void> {
+    if (!config.userId) {
       return;
     }
     const { filePath, chunkSize, chunksDir } = config;
+    if (excute) {
+      const chunksPaths = fs.readdirSync(chunksDir);
+      chunksPaths.sort((a: string, b: string) => {
+        return (a.split("-")[1] as unknown as number) - (b.split("-")[1] as unknown as number);
+      })
+  
+      const list = chunksPaths.map((chunkName, index) => {
+        return this.pipeStream(
+          Path.resolve(chunksDir, chunkName),
+          fs.createWriteStream(filePath, {
+            start: index * chunkSize,
+          })
+        )
+      });
+      await Promise.all(list);
+    }
 
-    const chunksPaths = fs.readdirSync(chunksDir);
-    chunksPaths.sort((a: string, b: string) => {
-      return (a.split("-")[1] as unknown as number) - (b.split("-")[1] as unknown as number);
-    })
-    console.log("🚀 ~ UploadService ~ mergerFileChunks ~ chunksPaths:", chunksPaths)
-    // 用promise池会乱序导致合并的文件错误, 看是否有解决办法
+    if (fs.existsSync(chunksDir)) {
+      fs.rm(chunksDir, { recursive: true }, (err) => {
+        if (err) throw err;
+      });
+    }
 
-    // let index = 0;
-    // const max = 50;
-    // const task_pool: Promise<void>[] = [];
-    // while (index < chunksPaths.length) {
-    //   const chunkName = chunksPaths[index];
-    //   const task = this.pipeStream(
-    //     path.resolve(chunksDir, chunkName),
-    //     fs.createWriteStream(filePath, {
-    //       start: index * chunkSize,
-    //     })
-    //   );
-    //   task.then(() => {
-    //     task_pool.splice(task_pool.findIndex((item: any) => item === task));
-    //   });
-    //   task_pool.push(task);
-    //   if (task_pool.length === max) {
-    //     await Promise.race(task_pool);
-    //   }
-    //   index ++ 
-    // }
-    // await Promise.all(task_pool);
+    if (config.fileType === 'video') {
+      const isExisted = await this.checkSeriesVideoExist({
+        seriesId: config.seriesId,
+        sequence: config.sequence,
+      })
+      if (isExisted) {
+        throw new Error("已有相同序列")
+      }
+      const videoInfo: CreateVideoInfoType = {
+        userId: config.userId,
+      };
+      videoInfo.videoHash = config.fileHash;
+      videoInfo.seriesId = config.seriesId;
+      videoInfo.sequence = config.sequence;
+      videoInfo.sourcePath = config.filePath;
+      videoInfo.title = config.fileName;
+      videoInfo.extName = config.extName;
+      const info = await this.ffmpegService.getFileInfo(videoInfo.sourcePath);
+      videoInfo.size = info.size;
+      videoInfo.bitrate = info.bit_rate;
+      videoInfo.duration =  Math.ceil(info.duration as number);
+      videoInfo.aspectRatio =  info.video.display_aspect_ratio;
+      await this.videoService.createOne(videoInfo);
+    }
+    if (config.fileType === 'image') {
 
-    const list = chunksPaths.map((chunkName, index) => {
-      return this.pipeStream(
-        path.resolve(chunksDir, chunkName),
-        fs.createWriteStream(filePath, {
-          start: index * chunkSize,
-        })
-      )
-    });
-    await Promise.all(list);
-
-    fs.rmdir(chunksDir, (err) => {
-      if (err) throw err;
-    });
+    }
     return;
   }
 
@@ -67,4 +89,18 @@ export class UploadService {
       readStream.pipe(writeStream);
     });
   }
+}
+
+type ConfigType = {
+  fileHash: string,
+  fileName: string,
+  extName: string,
+  filePath: string,
+  chunksDir: string,
+  chunkSize: number,
+  userId: number,
+  fileType: string,
+  seriesId: number,
+  sequence: number,
+  timezone?: number,
 }

@@ -1,20 +1,25 @@
-import { roleObj } from './ModelMaker'
+import { compareKeyMap, paramType, roleObj } from './ModelMaker'
+import { checkTypeAndValue, getType } from './impl/checkTypeUtil';
+import { CreateError } from './impl/CreateError';
+import { ErrorCodeModel } from './impl/validateErrorCode';
 import { whiteListConfig } from './whiteList'
+import * as _ from 'lodash';
 
-export interface dataRoleObj {
+interface _dataRole {
   // isReturn 为false则只进行校验, true会校验并只返回校验内容
   isReturn?: boolean
   // key 为受校验属性
   targetRole?: {[key: string]: roleObj}
 }
+export type dataRoleObj = Readonly<_dataRole>;
 
 export class ValidateUtil {
-  static validate(_originData: any, dataRole: dataRoleObj): any {
-    const result: {[key: string]: any} = {}
+  static validate<T>(_originData: T, dataRole: dataRoleObj): unknown {
+    const result: {[key: string]: unknown} = {}
     if (!dataRole || !_originData) {
       return;
     }
-    const originData = deepClone(_originData)
+    const originData = _.cloneDeep(_originData) as any;
 
     const targetRole = dataRole.targetRole || {}
     for (const paramName in targetRole) {
@@ -22,7 +27,7 @@ export class ValidateUtil {
         const paramRole = targetRole[paramName]
 
         // 是否必传
-        if (paramRole.required && originData[paramName] === null) {
+        if (paramRole.required && (originData[paramName] === null || originData[paramName] === undefined)) {
           throw new CreateError({
             code: 'xxxxx',
             message: `${paramName}必传`,
@@ -31,18 +36,10 @@ export class ValidateUtil {
           })
         }
 
-        // 验证参数类型
-        if (
-          paramRole.type &&
-          originData[paramName] !== null &&
-          getType(originData[paramName]) !== paramRole.type
-          ) {
-          throw new CreateError({
-            code: 'xxxxx',
-            message: '验证参数类型',
-            value: originData[paramName],
-            columnName: paramName,
-          })
+        // 验证参数类型type 和 参数范围min,max
+        const formatVal = checkTypeAndValue(originData[paramName], paramRole, paramName);
+        if (formatVal !== null && formatVal !== undefined) {
+          originData[paramName] = formatVal
         }
 
         // 参数值限制
@@ -53,8 +50,8 @@ export class ValidateUtil {
           !paramRole.emu.includes(originData[paramName])
         ) {
           throw new CreateError({
-            code: 'xxxxx',
-            message: '参数值限制',
+            code: ErrorCodeModel[10021].code,
+            message: ErrorCodeModel[10021].desc,
             value: originData[paramName],
             columnName: paramName,
           })
@@ -65,13 +62,13 @@ export class ValidateUtil {
           const regx = new RegExp(paramRole.regex.regex)
           let isPass = true
           if (
-            ['string', 'float', 'integer'].includes(
-              getType(originData[paramName])
-            )
+            paramType.string === getType(originData[paramName]) ||
+            paramType.float === getType(originData[paramName]) ||
+            paramType.integer === getType(originData[paramName])
           ) {
             isPass = isPass && regx.test(originData[paramName])
           }
-          if (getType(originData[paramName]) === 'array') {
+          if (getType(originData[paramName]) === paramType.array) {
             for (let i = 0; i < originData[paramName].length; i++) {
               const el = originData[paramName][i]
               isPass = isPass && regx.test(el)
@@ -79,66 +76,8 @@ export class ValidateUtil {
           }
           if (!isPass) {
             throw new CreateError({
-              code: 'xxxxx',
-              message: '正则匹配结果',
-              value: originData[paramName],
-              columnName: paramName,
-            })
-          }
-        }
-
-        // 最小值
-        if (
-          typeof paramRole.min === 'number' &&
-          originData[paramName] !== null
-        ) {
-          if (
-            getType(originData[paramName]) === 'string' &&
-            originData[paramName].length < paramRole.min
-          ) {
-            throw new CreateError({
-              code: 'xxxxx',
-              message: '最小值',
-              value: originData[paramName],
-              columnName: paramName,
-            })
-          }
-          if (
-            ['integer', 'float'].includes(getType(originData[paramName])) &&
-            originData[paramName] < paramRole.min
-          ) {
-            throw new CreateError({
-              code: 'xxxxx',
-              message: '最小值',
-              value: originData[paramName],
-              columnName: paramName,
-            })
-          }
-        }
-
-        // 最大值
-        if (
-          typeof paramRole.max === 'number' &&
-          originData[paramName] !== null
-        ) {
-          if (
-            getType(originData[paramName]) === 'string' &&
-            originData[paramName].length > paramRole.max
-          ) {
-            throw new CreateError({
-              code: 'xxxxx',
-              message: '最大值',
-              value: originData[paramName],
-              columnName: paramName,
-            })
-          }
-          if (
-            ['integer', 'float'].includes(getType(originData[paramName])) &&
-            originData[paramName] > paramRole.max
-          ) {
-            throw new CreateError({
-              code: 'xxxxx',
-              message: '最大值',
+              code: ErrorCodeModel[10060].code,
+              message: ErrorCodeModel[10060].desc,
               value: originData[paramName],
               columnName: paramName,
             })
@@ -156,43 +95,38 @@ export class ValidateUtil {
           const compareKey = paramRole.compareTo.compareKey
           let errCode = null
           switch (compareKey) {
-            case 'lt':
+            case compareKeyMap.lt:
               if (!(_current < _target)) {
-                errCode = ''
+                errCode = ErrorCodeModel[10080].code
               }
               break
-
-            case 'gt':
+            case compareKeyMap.gt:
               if (!(_current > _target)) {
-                errCode = ''
+                errCode = ErrorCodeModel[10080].code
               }
               break
-
-            case 'equal':
+            case compareKeyMap.equal:
               if (_current !== _target) {
-                errCode = ''
+                errCode = ErrorCodeModel[10080].code
               }
               break
-
-            case 'lte':
+            case compareKeyMap.lte:
               if (!(_current <= _target)) {
-                errCode = ''
+                errCode = ErrorCodeModel[10080].code
               }
               break
-
-            case 'gte':
+            case compareKeyMap.gte:
               if (!(_current >= _target)) {
-                errCode = ''
+                errCode = ErrorCodeModel[10080].code
               }
               break
-
             default:
               break
           }
           if (errCode) {
             throw new CreateError({
               code: errCode,
-              message: '参数间对比',
+              message: ErrorCodeModel[10080].desc,
               value: originData[paramName],
               columnName: paramName,
             })
@@ -201,7 +135,7 @@ export class ValidateUtil {
 
         // 去除首尾空格
         if (paramRole.trim) {
-          getType(originData[paramName]) === 'string' &&
+          getType(originData[paramName]) === paramType.string &&
             (originData[paramName] = originData[paramName].trim())
         }
 
@@ -213,10 +147,10 @@ export class ValidateUtil {
         // 复杂结构的子参数
         if (paramRole.child && originData[paramName] !== null) {
           const _type = getType(originData[paramName])
-          if (_type === 'object') {
+          if (_type === paramType.object) {
             this.validate(originData[paramName], paramRole.child)
           }
-          if (_type === 'array' && originData[paramName].length > 0) {
+          if (_type === paramType.array && originData[paramName].length > 0) {
             for (let i = 0; i < originData[paramName].length; i++) {
               const el = originData[paramName][i]
               this.validate(el, paramRole.child)
@@ -239,86 +173,4 @@ export class ValidateUtil {
       return _originData
     }
   }
-}
-
-/**
- * 错误类型自定义
- * @param {*} option
- */
-interface optionObj {
-  code: number | string
-  message: string
-  value: any
-  columnName: string
-}
-
-class CreateError extends Error {
-  code: number | string
-  errCode: number | string
-  value: any
-  columnName: string
-  constructor(option: optionObj) {
-    super()
-    this.code = option.code
-    this.errCode = option.code
-    this.message = option.message
-    this.value = option.value
-    this.columnName = option.columnName
-  }
-}
-
-function getType(data: any): string {
-  interface typeMapObj {
-    [key: string]: string
-  }
-  const typeMap: typeMapObj = {
-    '[object Object]': 'object',
-    '[object Function]': 'function',
-    '[object Array]': 'array',
-    '[object Number]': 'number',
-    '[object String]': 'string',
-    '[object Null]': 'null',
-    '[object Undefined]': 'undefined',
-    '[object Boolean]': 'boolean',
-    '[object Uint8Array]': 'uint8array',
-    '[object ArrayBuffer]': 'arraybuffer',
-  }
-  let type = Object.prototype.toString.call(data)
-  type = typeMap[type].toLocaleLowerCase()
-  if (type === 'number') {
-    // 整数
-    const intRegx = new RegExp(/^-?[1-9]\d*$/, 'i')
-    // 浮点数
-    const floatRegx = new RegExp(
-      /^-?([1-9]\d*\.\d+|0\.\d*[1-9]\d*|\d+\.\d+)$/,
-      'i'
-    )
-    if (floatRegx.test(data)) {
-      type = 'float'
-    } else if (intRegx.test(data)) {
-      type = 'integer'
-    }
-  }
-  return type
-}
-
-function deepClone(target: any) {
-  let result: any = null
-  if (getType(target) === 'object') {
-    result = {}
-    for (const key in target) {
-      if (Object.hasOwnProperty.call(target, key)) {
-        const value = target[key]
-        result[key] = value
-      }
-    }
-  }
-  if (getType(target) === 'array') {
-    result = new Array(target.length).fill(0)
-    for (let i = 0; i < target.length; i++) {
-      const el = target[i]
-      result[i] = el
-    }
-  }
-  return result || target
 }

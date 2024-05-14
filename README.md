@@ -1,6 +1,6 @@
 ## Description
 
-upload_api
+video_api
 
 ## Installation
 

@@ -1,6 +1,7 @@
 import { dataRoleObj } from './ValidateUtil'
+import { getType } from './impl/checkTypeUtil';
 
-const paramType = {
+export const paramType = {
   integer: 'integer',
   float: 'float',
   string: 'string',
@@ -9,48 +10,36 @@ const paramType = {
   boolean: 'boolean',
   uint8array: 'uint8array',
   arraybuffer: 'arraybuffer',
-}
+} as const;
+const paramTypes = Object.values(paramType);
+export type ParamType = typeof paramTypes[number]
 
-function getType(data: any): string {
-  // ts中Object key值的类型不是string 需要显示定义后才能使用索引
-  const typeMap: {
-    [key: string]: string
-  } = {
-    '[object Object]': 'object',
-    '[object Function]': 'function',
-    '[object Array]': 'array',
-    '[object Number]': 'number',
-    '[object String]': 'string',
-    '[object Null]': 'null',
-    '[object Undefined]': 'undefined',
-    '[object Boolean]': 'boolean',
-    '[object Uint8Array]': 'uint8array',
-    '[object ArrayBuffer]': 'arraybuffer',
-  }
-  const type: string = Object.prototype.toString.call(data)
+export const compareKeyMap = {
+  lt: "lt",
+  gt: "gt",
+  equal: "equal",
+  lte: "lte",
+  gte: "gte",
+} as const;
+export type CompareKey = "lt" | "gt" | "equal" | "lte" | "gte";
 
-  return typeMap[type].toLocaleLowerCase()
-}
-
-interface regexObj {
-  regex: string
-  errMsg: string
-}
-interface compareToObj {
-  attrName: string
-  compareKey: string
-}
 export interface roleObj {
-  type?: string
+  type?: ParamType
   required?: boolean
   desc?: string
-  emu?: Array<any>
-  regex?: regexObj
+  emu?: Array<unknown>
+  regex?: {
+    regex: string
+    errMsg: string
+  }
   min?: number
   max?: number
-  compareTo?: compareToObj
+  compareTo?: {
+    attrName: string
+    compareKey: CompareKey
+  }
   trim?: boolean
-  defaultTo?: any
+  defaultTo?: unknown
   child?: dataRoleObj
 }
 
@@ -128,14 +117,15 @@ export class ModelMaker {
    * @param {Array} limitArr
    * @returns
    */
-  emu(limitArr: Array<any> = []) {
+  emu<T>(limitArr: Array<T> = []) {
     if (!limitArr || limitArr.length <= 0) {
       return this
     }
     if (this.role.type) {
       for (let i = 0; i < limitArr.length; i++) {
         const limitEl = limitArr[i]
-        if (getType(limitEl) !== this.role.type) {
+        const _type = this.role.type;
+        if (getType(limitEl) !== _type) {
           throw new Error('emu存在限制值不符合该校验的类型限制')
         }
       }
@@ -184,7 +174,7 @@ export class ModelMaker {
    * @param {String} attrName
    * @param {String} compareKey lt: 需要小于  gt: 需要大于   equal: 等于  lte: 需要小于等于  gte: 需要大于等于
    */
-  compareTo(attrName: string, compareKey: string) {
+  compareTo(attrName: string, compareKey: CompareKey) {
     this.role.compareTo = {
       attrName,
       compareKey,
@@ -204,7 +194,7 @@ export class ModelMaker {
    * 空的时候的默认值
    * @param {*} _default
    */
-  defaultTo(_default: any) {
+  defaultTo<T>(_default: T) {
     this.role.defaultTo = _default
     return this
   }
@@ -213,7 +203,7 @@ export class ModelMaker {
    * 复杂结构的子参数
    * @param {Object} childRole
    */
-  child(childRole: object) {
+  child(childRole: dataRoleObj) {
     this.role.child = childRole
     return this
   }

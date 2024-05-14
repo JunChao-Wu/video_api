@@ -4,4 +4,4 @@
 // 通常是由中间件处理的后续业务用到的常用数据
 
 // 有新的需要就往数组添加
-export const whiteListConfig = ['http']
+export const whiteListConfig: string[] = ["http", "user", "requestId"]
